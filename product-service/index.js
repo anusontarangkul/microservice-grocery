@@ -10,6 +10,7 @@ const isAuthenticated = require('../isAuthenticated')
 app.use(express.json())
 
 let channel, connection
+let order
 
 mongoose.connect('mongodb://localhost/product-service', {}, () => {
     console.log('Product-service DB connected')
@@ -37,7 +38,28 @@ app.post('/product/create', isAuthenticated, async (req, res) => {
         price
     })
     console.log('newProduct', newProduct)
+    newProduct.save()
     return res.json(newProduct)
+})
+
+// user sends a list of product's IDs to buy
+// Creating an order with those products and a total value of sum of product's prices
+
+app.post('/product/buy', isAuthenticated, async (req, res) => {
+    const { ids } = req.body
+    console.log('ids', ids)
+    const products = await Product.find({ _id: { $in: ids } })
+    console.log('products', products)
+    channel.sendToQueue('ORDER', Buffer.from(JSON.stringify({
+        products,
+        userEmail: req.user.email
+    })))
+    channel.consume("PRODUCT", data => {
+        console.log('consuming PRODUCT queue')
+        order = JSON.parse(data.content)
+        channel.ack(data)
+    })
+    return res.json(order)
 })
 
 
